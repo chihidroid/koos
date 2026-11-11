@@ -3,216 +3,107 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KOOS & Lysholm 自動スキャナー (実戦版)</title>
+    <title>KOOS & Lysholm マークシート入力ツール</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Excel出力用ライブラリ (SheetJS) -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body class="bg-slate-100 text-slate-800 p-4">
-    <div class="max-w-md mx-auto bg-white p-5 rounded-xl shadow-md">
-        <h1 class="text-lg font-bold mb-2 text-slate-700">KOOS / Lysholm 自動スキャナー</h1>
-        <p class="text-xs text-slate-500 mb-4">問診票（全ページ）の写真を撮影・選択し、AI解析を実行してください。</p>
+    <div class="max-w-xl mx-auto bg-white p-6 rounded-xl shadow-md">
+        <h1 class="text-xl font-bold mb-2 text-slate-700">KOOS & Lysholm マークシート入力</h1>
+        <p class="text-xs text-slate-500 mb-6">紙の問診票を見ながらマーク（選択）し、下部のボタンでExcelを出力します。</p>
 
-        <!-- APIキー入力 -->
-        <div class="mb-4">
-            <label class="block text-xs font-semibold text-slate-600 mb-1">Gemini API Key</label>
-            <input type="password" id="apiKeyInput" placeholder="APIキーを入力してください" class="w-full text-xs p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        <!-- 患者情報 -->
+        <div class="mb-6 p-4 bg-slate-50 rounded-lg border">
+            <label class="block text-xs font-semibold text-slate-600 mb-1">患者ID / 氏名</label>
+            <input type="text" id="patientId" placeholder="例: 123456 (山田太郎)" class="w-full text-sm p-2 border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
 
-        <!-- 画像選択エリア -->
-        <div class="mb-4">
-            <label class="block w-full bg-blue-600 text-white text-center py-3 rounded-lg font-semibold cursor-pointer shadow hover:bg-blue-700 transition text-sm">
-                問診票の画像を選択 (複数可)
-                <input type="file" id="imageInput" accept="image/*" multiple class="hidden" />
-            </label>
-            <p class="text-[10px] text-slate-400 mt-1 text-center">※全ページ分の画像をまとめて選択してください</p>
-        </div>
-
-        <!-- プレビューエリア -->
-        <div id="previewArea" class="mb-4 hidden">
-            <h2 class="text-xs font-semibold text-slate-600 mb-1">選択された画像 (<span id="imageCount">0</span>枚)</h2>
-            <div id="thumbnailContainer" class="flex gap-2 overflow-x-auto p-2 bg-slate-50 rounded-lg border"></div>
-        </div>
-
-        <!-- 実行ボタン -->
-        <div id="actionArea" class="mb-4 hidden">
-            <button onclick="analyzeImages()" class="w-full bg-amber-600 text-white py-2.5 rounded-lg font-semibold shadow hover:bg-amber-700 transition text-sm">
-                AI解析・スコア計算を実行
-            </button>
-        </div>
-
-        <!-- ステータス・エラー表示エリア -->
-        <div id="statusArea" class="hidden bg-slate-50 p-3 rounded-lg text-xs font-mono mb-4 border">
-            <p id="statusText" class="text-blue-600">待機中...</p>
-        </div>
-
-        <!-- 解析結果確認 ＆ ダウンロードエリア -->
-        <div id="resultArea" class="hidden border-t pt-4 mt-4">
-            <h2 class="text-xs font-bold text-slate-700 mb-2">【確認】抽出されたスコア</h2>
-            <div id="resultDetails" class="bg-slate-50 p-3 rounded-lg text-xs font-mono mb-3 border space-y-1">
-                <!-- 結果詳細 -->
+        <!-- KOOS 簡易サンプルセクション (※必要に応じて項目を追加・調整可能) -->
+        <div class="space-y-6 mb-6">
+            <!-- 痛み (Pain) -->
+            <div class="p-4 bg-blue-50 rounded-lg border border-blue-100">
+                <h2 class="text-sm font-bold text-blue-800 mb-2">1. 痛み (Pain) 代表項目</h2>
+                <div class="space-y-2 text-xs">
+                    <div>
+                        <p class="font-medium text-slate-700 mb-1">Q1: 膝の痛みはどの頻度ですか？</p>
+                        <div class="grid grid-cols-5 gap-1 text-center">
+                            <label class="bg-white p-2 rounded border cursor-pointer hover:bg-blue-150"><input type="radio" name="pain1" value="0" class="block mx-auto mb-1">全くない</label>
+                            <label class="bg-white p-2 rounded border cursor-pointer hover:bg-blue-150"><input type="radio" name="pain1" value="25" class="block mx-auto mb-1">稀に</label>
+                            <label class="bg-white p-2 rounded border cursor-pointer hover:bg-blue-150"><input type="radio" name="pain1" value="50" class="block mx-auto mb-1">時々</label>
+                            <label class="bg-white p-2 rounded border cursor-pointer hover:bg-blue-150"><input type="radio" name="pain1" value="75" class="block mx-auto mb-1">しばしば</label>
+                            <label class="bg-white p-2 rounded border cursor-pointer hover:bg-blue-150"><input type="radio" name="pain1" value="100" class="block mx-auto mb-1">いつも</label>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <button onclick="downloadExcel()" class="w-full bg-emerald-600 text-white py-3 rounded-lg font-semibold shadow hover:bg-emerald-700 transition text-sm">
-                Excel (xlsx) をダウンロードして完了
-            </button>
+
+            <!-- 日常生活動作 (ADL) -->
+            <div class="p-4 bg-emerald-50 rounded-lg border border-emerald-100">
+                <h2 class="text-sm font-bold text-emerald-800 mb-2">2. 日常生活動作 (ADL) 代表項目</h2>
+                <div class="space-y-2 text-xs">
+                    <div>
+                        <p class="font-medium text-slate-700 mb-1">Q2: 階段を下りるときの手間は？</p>
+                        <div class="grid grid-cols-5 gap-1 text-center">
+                            <label class="bg-white p-2 rounded border cursor-pointer"><input type="radio" name="adl1" value="0" class="block mx-auto mb-1">全くない</label>
+                            <label class="bg-white p-2 rounded border cursor-pointer"><input type="radio" name="adl1" value="25" class="block mx-auto mb-1">軽い</label>
+                            <label class="bg-white p-2 rounded border cursor-pointer"><input type="radio" name="adl1" value="50" class="block mx-auto mb-1">中等度</label>
+                            <label class="bg-white p-2 rounded border cursor-pointer"><input type="radio" name="adl1" value="75" class="block mx-auto mb-1">重度</label>
+                            <label class="bg-white p-2 rounded border cursor-pointer"><input type="radio" name="adl1" value="100" class="block mx-auto mb-1">極めて重度</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Lysholm Score -->
+            <div class="p-4 bg-amber-50 rounded-lg border border-amber-100">
+                <h2 class="text-sm font-bold text-amber-800 mb-2">3. Lysholm Score 簡易入力</h2>
+                <div class="space-y-2 text-xs">
+                    <div>
+                        <p class="font-medium text-slate-700 mb-1">不安定性 (Instability) 評価</p>
+                        <select id="lysholmInstability" class="w-full p-2 border rounded bg-white text-xs">
+                            <option value="25">崩れることは全くない (25点)</option>
+                            <option value="20">スポーツ時にたまに不安定 (20点)</option>
+                            <option value="15">日常動作で不安定 (15点)</option>
+                            <option value="10">頻繁に膝が崩れる (10点)</option>
+                            <option value="0">歩行中も常に崩れる (0点)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
         </div>
+
+        <!-- アクションボタン -->
+        <button onclick="exportExcel()" class="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold shadow hover:bg-blue-700 transition text-sm">
+            Excel (xlsx) をダウンロード
+        </button>
     </div>
 
     <script>
-        let selectedFiles = [];
-        let parsedData = null;
+        function exportExcel() {
+            const patientId = document.getElementById('patientId').value.trim() || "未設定ID";
+            
+            // 選択された値の取得（例として簡易的に集計）
+            const painSelected = document.querySelector('input[name="pain1"]:checked');
+            const adlSelected = document.querySelector('input[name="adl1"]:checked');
+            const lysholmVal = document.getElementById('lysholmInstability').value;
 
-        document.getElementById('imageInput').addEventListener('change', function(e) {
-            selectedFiles = Array.from(e.target.files);
-            if (selectedFiles.length === 0) return;
-
-            const container = document.getElementById('thumbnailContainer');
-            container.innerHTML = '';
-            document.getElementById('imageCount').innerText = selectedFiles.length;
-
-            selectedFiles.forEach((file) => {
-                const reader = new FileReader();
-                reader.onload = function(event) {
-                    const img = document.createElement('img');
-                    img.src = event.target.result;
-                    img.className = 'w-16 h-16 object-cover rounded border';
-                    container.appendChild(img);
-                }
-                reader.readAsDataURL(file);
-            });
-
-            document.getElementById('previewArea').classList.remove('hidden');
-            document.getElementById('actionArea').classList.remove('hidden');
-            document.getElementById('statusArea').classList.add('hidden');
-            document.getElementById('resultArea').classList.add('hidden');
-        });
-
-        async function fileToBase64(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(reader.result.split(',')[1]);
-                reader.onerror = reject;
-                reader.readAsDataURL(file);
-            });
-        }
-
-        async function analyzeImages() {
-            const apiKey = document.getElementById('apiKeyInput').value.trim();
-            if (!apiKey) {
-                alert("Gemini APIキーを入力してください。");
-                return;
-            }
-            if (selectedFiles.length === 0) {
-                alert("画像を選択してください。");
-                return;
-            }
-
-            document.getElementById('statusArea').classList.remove('hidden');
-            document.getElementById('statusText.className = "text-blue-600";
-            document.getElementById('statusText').innerText = "画像をエンコード中...";
-            document.getElementById('resultArea').classList.add('hidden');
-
-            try {
-                const imageParts = [];
-                for (const file of selectedFiles) {
-                    const base64Data = await fileToBase64(file);
-                    imageParts.push({
-                        inlineData: { data: base64Data, mimeType: file.type }
-                    });
-                }
-
-                document.getElementById('statusText').innerText = "AIが手書き内容を解析中... (少々お待ちください)";
-
-                const promptText = `
-あなたは医療アシスタントです。添付されたKOOS（膝障害評価質問票）およびLysholm Knee Scoreの手書き画像を解析してください。
-患者ID、KOOSの5つのサブスケール（症状、痛み、日常生活動作、スポーツ・レクリエーション、生活の質）のスコア（0から100点）、およびLysholmの合計点を算出してください。
-もし画像が不鮮明で読み取れない項目が多い場合や、手書きが確認できない場合は、エラーメッセージを返してください。
-出力は必ず以下のJSON形式のみで行い、マークダウンのバッククォートなどは使わず純粋なJSON文字列として返してください。
-
-{
-  "status": "success",
-  "patient_id": "不明または記載されたID",
-  "koos_symptoms": 0.0,
-  "koos_pain": 0.0,
-  "koos_adl": 0.0,
-  "koos_sport": 0.0,
-  "koos_qol": 0.0,
-  "lysholm_total": 0
-}
-もし不鮮明で読み取れない場合は:
-{
-  "status": "error",
-  "message": "画像が不鮮明か、手書き文字が確認できません。明るい場所でピントを合わせて再撮影してください。"
-}
-                `;
-
-                const contents = [...imageParts, { text: promptText }];
-
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contents: [{ parts: contents }] })
-                });
-
-                if (!response.ok) {
-                    throw new Error("API通信に失敗しました (ステータス: " + response.status + ")");
-                }
-
-                const result = await response.json();
-                const textResponse = result.candidates[0].content.parts[0].text;
-                
-                // JSONの抽出とパース
-                const cleanJsonText = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
-                parsedData = JSON.parse(cleanJsonText);
-
-                if (parsedData.status === "error") {
-                    throw new Error(parsedData.message || "画像の解析に失敗しました。");
-                }
-
-                document.getElementById('statusText').innerHTML = `<span class="text-emerald-600 font-bold">✓ AI解析が正常に完了しました。</span>`;
-                
-                // 結果確認エリアに数値を表示
-                document.getElementById('resultDetails').innerHTML = `
-                    <div>ID: <b>${parsedData.patient_id}</b></div>
-                    <div>KOOS 症状: <b>${parsedData.koos_symptoms}</b></div>
-                    <div>KOOS 痛み: <b>${parsedData.koos_pain}</b></div>
-                    <div>KOOS ADL: <b>${parsedData.koos_adl}</b></div>
-                    <div>KOOS スポーツ: <b>${parsedData.koos_sport}</b></div>
-                    <div>KOOS QOL: <b>${parsedData.koos_qol}</b></div>
-                    <div>Lysholm 合計: <b>${parsedData.lysholm_total}点</b></div>
-                `;
-                document.getElementById('resultArea').classList.remove('hidden');
-
-            } catch (err) {
-                console.error(err);
-                document.getElementById('statusText').innerHTML = `
-                    <span class="text-red-600 font-bold">⚠️ 認識エラーが発生しました</span><br>
-                    <span class="text-slate-600">${err.message}</span><br><br>
-                    <span class="text-amber-600">→ カメラのブレや影を確認し、再度撮影してやり直してください。</span>
-                `;
-                document.getElementById('resultArea').classList.add('hidden');
-            }
-        }
-
-        function downloadExcel() {
-            if (!parsedData) return;
+            const painScore = painSelected ? parseInt(painSelected.value) : 0;
+            const adlScore = adlSelected ? parseInt(adlSelected.value) : 0;
 
             const rowData = [{
-                "ID": parsedData.patient_id,
-                "取得日時": new Date().toLocaleString(),
-                "KOOS_症状": parsedData.koos_symptoms,
-                "KOOS_痛み": parsedData.koos_pain,
-                "KOOS_ADL": parsedData.koos_adl,
-                "KOOS_スポーツ": parsedData.koos_sport,
-                "KOOS_QOL": parsedData.koos_qol,
-                "Lysholm_合計": parsedData.lysholm_total
+                "患者ID": patientId,
+                "入力日時": new Date().toLocaleString(),
+                "KOOS_痛み_Q1": painScore,
+                "KOOS_ADL_Q2": adlScore,
+                "Lysholm_不安定性": parseInt(lysholmVal)
             }];
 
             const worksheet = XLSX.utils.json_to_sheet(rowData);
             const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, "KOOS集計");
+            XLSX.utils.book_append_sheet(workbook, worksheet, "マークシート集計");
 
-            XLSX.writeFile(workbook, `KOOS_${parsedData.patient_id || 'data'}.xlsx`);
+            XLSX.writeFile(workbook, `KOOS_Marksheet_${patientId}.xlsx`);
         }
     </script>
 </body>

@@ -14,9 +14,9 @@
         <div class="flex justify-between items-start">
             <div>
                 <h1 class="text-xl font-bold text-slate-700">KOOS / Lysholm AIスキャナー</h1>
-                <p class="text-xs text-slate-500 mt-1">紙の問診票を撮影し、IDのみを指定してAI解析を行います。</p>
+                <p class="text-xs text-slate-500 mt-1">紙の問診票（最大5枚）をまとめて撮影し、一括で解析します。</p>
             </div>
-            <span id="appVersion" class="bg-slate-200 text-slate-700 text-[10px] font-mono px-2 py-1 rounded">Ver: 2026.11.11-v2</span>
+            <span class="bg-indigo-100 text-indigo-700 text-[10px] font-mono px-2 py-1 rounded font-bold">Ver: 2026.11.11-v4</span>
         </div>
 
         <!-- APIキー設定エリア -->
@@ -29,24 +29,29 @@
             <p class="text-[10px] text-slate-400">※キーはブラウザ内（LocalStorage）にのみ保存され、外部には流出しません。</p>
         </div>
 
-        <!-- 患者ID（個人情報は入れずIDのみ） -->
-        <div class="p-4 bg-blue-50 rounded-lg border border-blue-100 space-y-2">
-            <label class="block text-xs font-semibold text-blue-800">患者ID（個人情報は含めないこと）</label>
-            <input type="text" id="patientId" placeholder="例: PT-12345" class="w-full text-xs p-2 border rounded bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        </div>
-
-        <!-- 画像アップロードエリア -->
-        <div class="p-4 border-2 border-dashed border-slate-300 rounded-lg text-center space-y-3">
-            <label class="block text-xs font-semibold text-slate-600">問診票の画像を選択・撮影</label>
-            <input type="file" id="imageInput" accept="image/*" capture="environment" class="text-xs w-full text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer" />
-            <div id="previewContainer" class="hidden mt-2">
-                <img id="imagePreview" class="max-h-48 mx-auto rounded border shadow-sm" alt="プレビュー" />
+        <!-- 患者ID & 評価日設定エリア -->
+        <div class="grid grid-cols-2 gap-3">
+            <div class="p-3 bg-blue-50 rounded-lg border border-blue-100 space-y-1">
+                <label class="block text-xs font-semibold text-blue-800">患者ID（匿名）</label>
+                <input type="text" id="patientId" placeholder="例: PT-12345" class="w-full text-xs p-2 border rounded bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div class="p-3 bg-blue-50 rounded-lg border border-blue-100 space-y-1">
+                <label class="block text-xs font-semibold text-blue-800">問診票の記載日</label>
+                <input type="date" id="evalDate" class="w-full text-xs p-2 border rounded bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
         </div>
 
+        <!-- 複数画像アップロードエリア（最大5枚） -->
+        <div class="p-4 border-2 border-dashed border-slate-300 rounded-lg text-center space-y-3">
+            <label class="block text-xs font-semibold text-slate-600">問診票の画像を選択・撮影（全5枚まで選択可能）</label>
+            <input type="file" id="imageInput" accept="image/*" multiple capture="environment" class="text-xs w-full text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer" />
+            <!-- プレビュー一覧 -->
+            <div id="previewContainer" class="hidden grid grid-cols-5 gap-2 mt-2 pt-2 border-t"></div>
+        </div>
+
         <!-- 解析実行ボタン -->
-        <button onclick="analyzeImage()" id="analyzeBtn" class="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold shadow hover:bg-blue-700 transition text-sm flex items-center justify-center gap-2">
-            AI解析を実行する
+        <button onclick="analyzeImages()" id="analyzeBtn" class="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold shadow hover:bg-blue-700 transition text-sm flex items-center justify-center gap-2">
+            全画像をAI一括解析する
         </button>
 
         <!-- ステータス・結果表示 -->
@@ -68,6 +73,9 @@
             if (savedKey) {
                 document.getElementById('apiKey').value = savedKey;
             }
+            // 本日の日付をデフォルトセット
+            document.getElementById('evalDate').valueAsDate = new Date();
+            console.log("App loaded: Ver 2026.11.11-v4");
         };
 
         function saveApiKey() {
@@ -81,26 +89,38 @@
             }
         }
 
-        let base64Image = null;
+        let base64Images = [];
         let lastParsedData = null;
 
+        // 複数画像ファイル選択時の処理
         document.getElementById('imageInput').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
+            const files = Array.from(e.target.files);
+            if (files.length === 0) return;
 
-            const reader = new FileReader();
-            reader.onload = function(uploadEvent) {
-                base64Image = uploadEvent.target.result;
-                const preview = document.getElementById('imagePreview');
-                preview.src = base64Image;
-                document.getElementById('previewContainer').classList.remove('hidden');
-            };
-            reader.readAsDataURL(file);
+            base64Images = [];
+            const previewContainer = document.getElementById('previewContainer');
+            previewContainer.innerHTML = '';
+            previewContainer.classList.remove('hidden');
+
+            files.forEach((file, index) => {
+                const reader = new FileReader();
+                reader.onload = function(uploadEvent) {
+                    base64Images.push(uploadEvent.target.result);
+
+                    // サムネイル表示
+                    const img = document.createElement('img');
+                    img.src = uploadEvent.target.result;
+                    img.className = "h-16 w-full object-cover rounded border shadow-sm";
+                    previewContainer.appendChild(img);
+                };
+                reader.readAsDataURL(file);
+            });
         });
 
-        async function analyzeImage() {
+        async function analyzeImages() {
             const apiKey = document.getElementById('apiKey').value.trim();
             const patientId = document.getElementById('patientId').value.trim();
+            const evalDate = document.getElementById('evalDate').value;
 
             if (!apiKey) {
                 alert('APIキーを入力してください。');
@@ -110,56 +130,52 @@
                 alert('患者IDを入力してください。');
                 return;
             }
-            if (!base64Image) {
-                alert('問診票の画像を選択してください。');
+            if (base64Images.length === 0) {
+                alert('問診票の画像を少なくとも1枚以上選択してください。');
                 return;
             }
 
             const statusArea = document.getElementById('statusArea');
-            statusArea.textContent = 'AIが画像を解析中です... しばらくお待ちください。';
-            statusArea.classList.remove('hidden');
+            statusArea.textContent = `AIが ${base64Images.length}枚の画像を解析中です... しばらくお待ちください。`;
+            statusArea.classList.remove('hidden', 'bg-rose-50', 'text-rose-800', 'bg-emerald-50', 'text-emerald-800');
+            statusArea.classList.add('bg-amber-50', 'text-amber-800');
             document.getElementById('analyzeBtn').disabled = true;
 
-            const matches = base64Image.match(/^data:(.+?);base64,(.+)$/);
-            if (!matches) {
-                alert('画像の読み込みに失敗しました。');
-                statusArea.classList.add('hidden');
-                document.getElementById('analyzeBtn').disabled = false;
-                return;
-            }
-            const mimeType = matches[1];
-            const base64Data = matches[2];
-
+            // マルチモーダルパーツの構築（画像複数対応）
+            const parts = [];
             const promptText = `
 あなたは医療文書のデータ抽出アシスタントです。
-添付された画像は膝関節評価用問診票（KOOSまたはLysholm）です。
-チェックが入っている箇所や選択されている項目を正確に読み取り、以下のJSONフォーマットのみで結果を出力してください。余計な解説文は一切不要です。
+添付された複数枚の画像は膝関節評価用問診票（KOOS全セクションおよびLysholmスコア）です。
+すべての画像に目を通し、チェックが入っている箇所や選択されている項目を統合して、以下のJSONフォーマットのみで結果を出力してください。余計な解説文は一切不要です。
 
 {
-  "scaleType": "KOOS または Lysholm",
+  "scaleType": "KOOS & Lysholm",
   "scores": {
-    "subscale_or_item_name": 抽出された数値またはスコア
+    "項目名またはサブスケール名": 抽出された数値またはスコア
   },
   "rawNotes": "特記事項や読み取りメモがあれば簡潔に"
 }
             `.trim();
 
-            const requestBody = {
-                contents: [{
-                    parts: [
-                        { text: promptText },
-                        {
-                            inline_data: {
-                                mime_type: mimeType,
-                                data: base64Data
-                            }
+            parts.push({ text: promptText });
+
+            for (let imgBase64 of base64Images) {
+                const matches = imgBase64.match(/^data:(.+?);base64,(.+)$/);
+                if (matches) {
+                    parts.push({
+                        inline_data: {
+                            mime_type: matches[1],
+                            data: matches[2]
                         }
-                    ]
-                }]
+                    });
+                }
+            }
+
+            const requestBody = {
+                contents: [{ parts: parts }]
             };
 
             try {
-                // モデル指定を安定版の gemini-1.5-flash に変更
                 const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -178,13 +194,14 @@
 
                 document.getElementById('resultOutput').textContent = JSON.stringify(lastParsedData, null, 2);
                 document.getElementById('resultContainer').classList.remove('hidden');
-                statusArea.textContent = '解析が完了しました。内容を確認してExcelを出力してください。';
+                statusArea.textContent = '全画像の解析が完了しました。内容を確認してExcelを出力してください。';
                 statusArea.classList.remove('bg-amber-50', 'text-amber-800');
                 statusArea.classList.add('bg-emerald-50', 'text-emerald-800');
 
             } catch (error) {
                 console.error(error);
                 statusArea.textContent = 'エラーが発生しました: ' + error.message;
+                statusArea.classList.remove('bg-amber-50', 'text-amber-800');
                 statusArea.classList.add('bg-rose-50', 'text-rose-800');
             } finally {
                 document.getElementById('analyzeBtn').disabled = false;
@@ -195,8 +212,11 @@
             if (!lastParsedData) return;
 
             const patientId = document.getElementById('patientId').value.trim();
+            const evalDate = document.getElementById('evalDate').value;
+
             const flatRow = {
                 "患者ID": patientId,
+                "記載日": evalDate,
                 "解析日時": new Date().toLocaleString(),
                 "評価尺度": lastParsedData.scaleType,
                 ...lastParsedData.scores,
@@ -207,7 +227,7 @@
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "AI解析結果");
 
-            XLSX.writeFile(workbook, `KOOS_AI_${patientId}.xlsx`);
+            XLSX.writeFile(workbook, `KOOS_Lysholm_${patientId}_${evalDate}.xlsx`);
         }
     </script>
 </body>

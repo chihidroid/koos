@@ -15,8 +15,8 @@
                 <h1 class="text-xl font-bold text-slate-700">KOOS / Lysholm AIスキャナー</h1>
                 <p class="text-xs text-slate-500 mt-1">紙の問診票を1枚ずつ追加して一括解析します。</p>
             </div>
-            <!-- バージョン v13 -->
-            <span class="bg-indigo-200 text-indigo-800 text-[10px] font-mono px-2 py-1 rounded font-bold">Ver: 2026.11.11-v13</span>
+            <!-- バージョン v14 -->
+            <span class="bg-emerald-200 text-emerald-800 text-[10px] font-mono px-2 py-1 rounded font-bold">Ver: 2026.11.11-v14</span>
         </div>
 
         <!-- APIキー設定エリア -->
@@ -41,19 +41,18 @@
             </div>
         </div>
 
-        <!-- 画像追加アップロードエリア（1枚ずつ撮ってストックする方式） -->
+        <!-- 画像追加アップロードエリア -->
         <div class="p-4 border-2 border-dashed border-slate-300 rounded-lg text-center space-y-3">
             <label class="block text-xs font-semibold text-slate-600">問診票の撮影・追加（何枚でも追加可能）</label>
             <input type="file" id="imageInput" accept="image/*" capture="environment" class="text-xs w-full text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer" />
             
-            <!-- ストックされた画像のサムネイル一覧（削除ボタン付き） -->
             <div id="previewContainer" class="hidden grid grid-cols-5 gap-2 mt-3 pt-3 border-t"></div>
             <div id="imageCount" class="text-xs text-slate-500 font-medium">現在選択されている画像: 0枚</div>
         </div>
 
         <!-- 解析実行ボタン -->
         <button onclick="analyzeImages()" id="analyzeBtn" class="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold shadow hover:bg-blue-700 transition text-sm flex items-center justify-center gap-2">
-            ストップした全画像をAI一括解析する
+            全画像をAI一括解析する
         </button>
 
         <!-- ステータス・ログ表示エリア -->
@@ -76,7 +75,7 @@
                 document.getElementById('apiKey').value = savedKey;
             }
             document.getElementById('evalDate').valueAsDate = new Date();
-            console.log("App loaded: Ver 2026.11.11-v13");
+            console.log("App loaded: Ver 2026.11.11-v14");
         };
 
         function saveApiKey() {
@@ -90,10 +89,9 @@
             }
         }
 
-        let base64Images = []; // 撮影した画像を蓄積する配列
+        let base64Images = [];
         let lastParsedData = null;
 
-        // 画像選択時に上書きせず「追加（プッシュ）」していく方式に変更
         document.getElementById('imageInput').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) return;
@@ -102,13 +100,11 @@
             reader.onload = function(uploadEvent) {
                 base64Images.push(uploadEvent.target.result);
                 updatePreview();
-                // 連続で選びやすいようにinputをリセット
                 e.target.value = '';
             };
             reader.readAsDataURL(file);
         });
 
-        // プレビューと枚数表示を更新する関数
         function updatePreview() {
             const previewContainer = document.getElementById('previewContainer');
             const countLabel = document.getElementById('imageCount');
@@ -134,8 +130,6 @@
                 badge.className = "absolute top-0 right-0 bg-slate-800 text-white text-[9px] px-1 rounded-bl";
                 badge.textContent = `#${index + 1}`;
 
-                // 削除ボタン
-                const removeBtn = document.createElement('buttonT');
                 const delBtn = document.createElement('button');
                 delBtn.className = "absolute -top-1 -left-1 bg-rose-600 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-bold shadow hover:bg-rose-700";
                 delBtn.textContent = "×";
@@ -149,6 +143,30 @@
                 wrapper.appendChild(delBtn);
                 previewContainer.appendChild(wrapper);
             });
+        }
+
+        // 利用可能なモデルを自動取得して決定する関数
+        async function getAvailableModel(apiKey) {
+            try {
+                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+                const data = await res.json();
+                if (data.models) {
+                    // generateContentが使えて、かつflashやproなどの名を持つモデルを優先検索
+                    const validModel = data.models.find(m => 
+                        m.supportedGenerationMethods && 
+                        m.supportedGenerationMethods.includes("generateContent") &&
+                        (m.name.includes("flash") || m.name.includes("pro"))
+                    );
+                    if (validModel) {
+                        // "models/gemini-1.5-flash" のような形式からモデル名部分を抽出
+                        return validModel.name.replace("models/", "");
+                    }
+                }
+            } catch (e) {
+                console.warn("モデル自動取得に失敗、フォールバックします", e);
+            }
+            // 万が一取得失敗時のデフォルト
+            return "gemini-1.5-flash";
         }
 
         async function analyzeImages() {
@@ -170,13 +188,18 @@
             }
 
             const statusArea = document.getElementById('statusArea');
-            statusArea.textContent = `[Ver.v13] AIがストックされた ${base64Images.length}枚の画像を解析中です...`;
+            statusArea.textContent = `[Ver.v14] 利用可能なAIモデルを自動検出中...`;
             statusArea.classList.remove('hidden', 'bg-rose-50', 'text-rose-800', 'bg-emerald-50', 'text-emerald-800');
             statusArea.classList.add('bg-amber-50', 'text-amber-800');
             document.getElementById('analyzeBtn').disabled = true;
 
-            const parts = [];
-            const promptText = `
+            try {
+                // 1. あなたのAPIキーで使えるモデル名を自動取得
+                const modelName = await getAvailableModel(apiKey);
+                statusArea.textContent = `[Ver.v14] モデル (${modelName}) で ${base64Images.length}枚の画像を解析中...`;
+
+                const parts = [];
+                const promptText = `
 あなたは医療文書のデータ抽出アシスタントです。
 添付された複数枚の画像は膝関節評価用問診票（KOOS全セクションおよびLysholmスコア）です。
 すべての画像に目を通し、チェックが入っている箇所や選択されている項目を統合して、以下のJSONフォーマットのみで結果を出力してください。余計な解説文は一切不要です。
@@ -188,28 +211,28 @@
   },
   "rawNotes": "特記事項や読み取りメモがあれば簡潔に"
 }
-            `.trim();
+                `.trim();
 
-            parts.push({ text: promptText });
+                parts.push({ text: promptText });
 
-            for (let imgBase64 of base64Images) {
-                const matches = imgBase64.match(/^data:(.+?);base64,(テンプレ|.+)$/) || imgBase64.match(/^data:(.+?);base64,(.+)$/);
-                if (matches) {
-                    parts.push({
-                        inline_data: {
-                            mime_type: matches[1],
-                            data: matches[2]
-                        }
-                    });
+                for (let imgBase64 of base64Images) {
+                    const matches = imgBase64.match(/^data:(.+?);base64,(.+)$/);
+                    if (matches) {
+                        parts.push({
+                            inline_data: {
+                                mime_type: matches[1],
+                                data: matches[2]
+                            }
+                        });
+                    }
                 }
-            }
 
-            const requestBody = {
-                contents: [{ parts: parts }]
-            };
+                const requestBody = {
+                    contents: [{ parts: parts }]
+                };
 
-            try {
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+                // 2. 取得した動的モデル名でエンドポイントを叩く
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(requestBody)
